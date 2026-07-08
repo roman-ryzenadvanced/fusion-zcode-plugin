@@ -15,41 +15,51 @@ const config = {
 
 // Task analysis patterns
 const CONSENSUS_PATTERNS = ["compare", "evaluate", "trade-off", "pros/cons", "perspective", "what are the", "should we", "advantages", "disadvantages"];
-const SEQUENTIAL_PATTERNS = ["build", "implement", "create", "then", "step", "first", "next", "and then", "refactor"];
+const SEQUENTIAL_PATTERNS = ["build", "implement", "create", "then", "step", "first", "next", "and then", "refactor", "write", "test", "review"];
+const SEQUENTIAL_CONJUNCTIONS = [" and ", " then ", " next ", " first ", " after that ", " finally "];
 const CODING_PATTERNS = ["code", "function", "script", "debug", "bug", "error", "implement", "python", "react", "api", "component", "class"];
 const ANALYSIS_PATTERNS = ["analyze", "research", "explain", "architecture", "design", "strategy", "review", "audit"];
 const CREATIVE_PATTERNS = ["creative", "brainstorm", "write", "design", "idea", "original", "story", "poem", "tagline"];
 
 function analyzeTask(task: string): { mode: string; models: string[]; confidence: number } {
   const taskLower = task.toLowerCase();
-  
+
+  // 1. Consensus: multi-perspective reasoning (highest priority for decision tasks)
   if (CONSENSUS_PATTERNS.some(p => taskLower.includes(p))) {
     return { mode: "consensus", models: config.analysisModels.slice(0, 3), confidence: 0.8 };
   }
-  
-  const sequentialMatches = SEQUENTIAL_PATTERNS.filter(p => taskLower.includes(p)).length;
-  if (sequentialMatches >= 2) {
+
+  // 2. Sequential: multi-step tasks. Trigger when >=2 action verbs OR
+  //    (>=1 action verb AND a conjunction chaining steps like "X and Y").
+  //    This must run BEFORE the specialist checks so that a task which is
+  //    both coding AND multi-step pipelines instead of routing to one model.
+  const seqVerbHits = SEQUENTIAL_PATTERNS.filter(p => taskLower.includes(p));
+  const hasConjunction = SEQUENTIAL_CONJUNCTIONS.some(c => taskLower.includes(c));
+  const isMultiStep = seqVerbHits.length >= 2 || (seqVerbHits.length >= 1 && hasConjunction);
+  if (isMultiStep) {
     return { mode: "sequential", models: [...config.analysisModels.slice(0, 1), ...config.codingModels.slice(0, 2)], confidence: 0.75 };
   }
-  
+
+  // 3. Specialist: single-domain routing
   for (const pattern of CODING_PATTERNS) {
     if (taskLower.match(new RegExp(pattern, "i"))) {
       return { mode: "specialist", models: config.codingModels, confidence: 0.9 };
     }
   }
-  
+
   for (const pattern of ANALYSIS_PATTERNS) {
     if (taskLower.includes(pattern)) {
       return { mode: "specialist", models: config.analysisModels, confidence: 0.75 };
     }
   }
-  
+
   for (const pattern of CREATIVE_PATTERNS) {
     if (taskLower.includes(pattern)) {
       return { mode: "specialist", models: config.creativeModels, confidence: 0.7 };
     }
   }
-  
+
+  // 4. Fallback: nothing matched, prioritize reliability
   return { mode: "fallback", models: [config.analysisModels[0]], confidence: 0.5 };
 }
 
