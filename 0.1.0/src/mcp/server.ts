@@ -13,6 +13,42 @@ const config = {
   apiBase: process.env.FUSION_API_BASE || "https://api.openrouter.ai/api/v1"
 };
 
+// Selection strategies:
+//   "auto"  — agent/classifier picks the models (default)
+//   "user"  — use EXACTLY the models the caller passed in `models`, no overrides
+type SelectionStrategy = "auto" | "user";
+
+// Resolve which models to use given the strategy and optional user picks.
+// - auto:  run the classifier, but honor explicit user models if provided
+// - user:  trust the caller's `models` list verbatim; if none given, fall back to auto
+function resolveExecution(
+  task: string,
+  strategy: SelectionStrategy,
+  modeHint: string | undefined,
+  userModels: string[] | undefined
+): { mode: string; models: string[]; confidence: number; strategy: SelectionStrategy; source: string } {
+  // User strategy with an explicit model list = trust the caller completely
+  if (strategy === "user" && userModels && userModels.length > 0) {
+    // Still let the classifier suggest a mode so the agent knows how to run them,
+    // unless the caller also forced a mode.
+    const mode = modeHint || analyzeTask(task).mode;
+    return { mode, models: userModels, confidence: 1.0, strategy: "user", source: "user-specified" };
+  }
+
+  // Auto strategy (or user strategy without a model list): classify + assign
+  const analysis = analyzeTask(task);
+  const mode = modeHint || analysis.mode;
+  // If the user passed models under auto, prefer them over the classifier's pick
+  const models = (userModels && userModels.length > 0) ? userModels : analysis.models;
+  return {
+    mode,
+    models,
+    confidence: userModels && userModels.length > 0 ? 0.95 : analysis.confidence,
+    strategy: "auto",
+    source: userModels && userModels.length > 0 ? "user-overridden-with-auto-mode" : "auto-classified",
+  };
+}
+
 // Task analysis patterns
 const CONSENSUS_PATTERNS = ["compare", "evaluate", "trade-off", "pros/cons", "perspective", "what are the", "should we", "advantages", "disadvantages"];
 const SEQUENTIAL_PATTERNS = ["build", "implement", "create", "then", "step", "first", "next", "and then", "refactor", "write", "test", "review"];
@@ -91,20 +127,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "execute_fusion",
-      description: "Execute a multi-model fusion task with automatic synthesis",
+      description: "Execute a multi-model fusion task. Use selection_strategy='auto' to let the agent pick models, or 'user' to force the exact models passed in `models`.",
       inputSchema: {
         type: "object",
         properties: {
           task: { type: "string", description: "The task to execute" },
-          mode: { type: "string", description: "Fusion mode (auto-detected if not specified)" },
-          models: { type: "array", items: { type: "string" }, description: "Models to use" }
+          mode: { type: "string", description: "Fusion mode: consensus, sequential, specialist, or fallback (auto-detected if not specified)" },
+          models: { type: "array", items: { type: "string" }, description: "Specific models to use. Required when selection_strategy='user'." },
+          selection_strategy: { type: "string", enum: ["auto", "user"], description: "'auto' = agent picks models (default). 'user' = use exactly the models in `models`, no overrides." }
         },
         required: ["task"]
       }
     },
     {
       name: "get_models",
-      description: "Get available models for each capability",
+      description: "Get available models for each capability. Use this to show the user what models they can pick from.",
       inputSchema: {
         type: "object",
         properties: {}
@@ -137,39 +174,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     case "execute_fusion": {
       const task = request.params.arguments?.task as string || "";
-      const mode = request.params.arguments?.mode as string | undefined;
+      const modeHint = request.params.arguments?.mode as string | undefined;
       const models = request.params.arguments?.models as string[] | undefined;
-      
-      const analysis = mode 
-        ? { mode, models: models || [] }
-        : analyzeTask(task);
-      
-      const modelsToUse = models || analysis.models;
-      
+      const strategy = (request.params.arguments?.selection_strategy as SelectionStrategy) || "auto";
+
+      const result = resolveExecution(task, strategy, modeHint, models);
+
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify({
               task,
-              mode: analysis.mode,
-              models: modelsToUse,
+              mode: result.mode,
+              models: result.models,
+              selection_strategy: result.strategy,
+              model_source: result.source,
+              confidence: result.confidence,
               status: "planned",
-              message: `Ready to execute ${analysis.mode} fusion with ${modelsToUse.length} model(s). Configure API endpoints via FUSION_API_KEY and FUSION_API_BASE environment variables.`
+              message:
+                result.strategy === "user"
+                  ? `Using USER-SPECIFIED models (${result.models.join(", ")}) in ${result.mode} mode. The agent will not override your choice.`
+                  : models && models.length > 0
+                    ? `Auto mode with user model preference (${result.models.join(", ")}). Mode auto-detected as ${result.mode}.`
+                    : `Auto-selected ${result.mode} mode with models: ${result.models.join(", ")}.`
             }, null, 2)
           }
         ]
       };
     }
-    
+
     case "get_models": {
+      // Return a richer view so the user can make an informed choice.
       const capabilities = {
-        coding: config.codingModels,
-        analysis: config.analysisModels,
-        creative: config.creativeModels,
-        vision: config.visionModels
+        coding: { models: config.codingModels, use_for: "Code generation, debugging, refactoring, implementation" },
+        analysis: { models: config.analysisModels, use_for: "Reasoning, comparison, research, architecture decisions" },
+        creative: { models: config.creativeModels, use_for: "Writing, brainstorming, taglines, content" },
+        vision: { models: config.visionModels, use_for: "Image understanding, OCR, visual QA" },
+        hint: "To let the user choose, show them these pools and call execute_fusion with selection_strategy='user' and their chosen models in the `models` array.",
       };
-      
+
       return {
         content: [
           {

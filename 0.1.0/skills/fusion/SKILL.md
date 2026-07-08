@@ -56,11 +56,34 @@ Default models organized by capability (configurable via environment):
 - **Creative**: gpt-4, claude-3-5-sonnet, command-r
 - **Vision**: gpt-4-vision, claude-3-opus-vision
 
+## Who picks the models?
+
+Fusion supports two model-selection strategies, controlled by the `selection_strategy` parameter on `execute_fusion`:
+
+- **`auto`** (default) — Fusion's classifier picks the best models for the task. Hands-off.
+- **`user`** — Use **exactly** the models the user specified in the `models` array. Fusion will not override or add models. The classifier still suggests a `mode` so the agent knows *how* to run them, but the model list is the user's final choice.
+
+### When to ask the user vs. decide for them
+
+Default to `auto`. Only offer `user` selection when the user signals they care about which model runs. Signals:
+- They name a model ("use Claude", "can GPT-4 handle this?")
+- They ask to choose ("which models?", "can I pick?")
+- They have a strong preference ("I don't want o1", "stick to open-source models")
+- They're iterating and unhappy with a previous model's output
+
+When you detect these signals:
+1. Call `mcp__fusion__get_models` to fetch the available pools.
+2. Present the pools to the user with a short description of each.
+3. Ask which model(s) they want (use the AskUserQuestion tool if available, or ask inline).
+4. Call `mcp__fusion__execute_fusion` with `selection_strategy: "user"` and their chosen `models`.
+
+If the user does not care, use `selection_strategy: "auto"` and proceed silently.
+
 ## MCP Integration
 
 If the Fusion MCP server is configured, use these tools:
-- `mcp__fusion__analyze_task` - Get task classification
-- `mcp__fusion__execute_fusion` - Run multi-model execution
-- `mcp__fusion__get_models` - List available models
+- `mcp__fusion__analyze_task` - Get task classification (mode + recommended models + confidence)
+- `mcp__fusion__execute_fusion` - Run multi-model execution. Supports `selection_strategy` ("auto" | "user"), `mode`, and `models`.
+- `mcp__fusion__get_models` - List available models grouped by capability, with a description of each pool's strengths.
 
 If MCP is not available, use skill-based delegation to existing agents with model hints.
