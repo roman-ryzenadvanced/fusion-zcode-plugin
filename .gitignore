@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ZCode
+*.session/
+.zcode-cache/
+
+# Environment files (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/

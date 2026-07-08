@@ -1,0 +1,32 @@
+{
+  "name": "fusion",
+  "version": "0.1.0",
+  "description": "Hybrid smart model fusion with auto-shifting between consensus, sequential, specialist, and fallback modes",
+  "author": {
+    "name": "ZCode"
+  },
+  "license": "MIT",
+  "skills": "skills",
+  "mcpServers": {
+    "fusion": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"],
+      "cwd": "${CLAUDE_PROJECT_DIR}",
+      "env": {
+        "FUSION_MODEL_CODING": "${user_config.coding_models}",
+        "FUSION_MODEL_ANALYSIS": "${user_config.analysis_models}",
+        "FUSION_MODEL_CREATIVE": "${user_config.creative_models}",
+        "FUSION_MODEL_VISION": "${user_config.vision_models}",
+        "FUSION_API_KEY": "${user_config.api_key}",
+        "FUSION_API_BASE": "${user_config.api_base}"
+      }
+    }
+  },
+  "userConfig": {
+    "coding_models": {
+      "type": "string",
+      "default": "deepseek-coder,gpt-4,claude-3-5-sonnet",
+      "description": "Comma-separated list of coding-specialized models"
+    }
+  }
+}

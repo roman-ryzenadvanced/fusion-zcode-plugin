@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@zcode/fusion-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Hybrid smart model fusion with auto-shifting between consensus, sequential, specialist, and fallback modes",
+  "bin": {
+    "fusion-mcp": "./dist/mcp/server.js"
+  },
+  "type": "module",
+  "main": "./dist/mcp/server.js",
+  "types": "./dist/mcp/server.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
